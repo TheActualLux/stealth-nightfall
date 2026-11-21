@@ -1,6 +1,7 @@
 // In-world-readable status strip, key count, alert meter, stamina, and contextual stealth advice.
 import { FONT, PALETTE, WIDTH } from './config.js';
 import { formatTime } from './render.js';
+import { findNearbyLantern } from './lanterns.js';
 
 function rounded(ctx, x, y, width, height, radius) {
   ctx.beginPath(); ctx.roundRect(x, y, width, height, radius);
@@ -8,6 +9,7 @@ function rounded(ctx, x, y, width, height, radius) {
 
 function hintFor(state) {
   if (state.notice) return state.notice;
+  if (findNearbyLantern(state.player.x, state.player.y, state.lanterns)) return 'E shutter or open this wall lantern.';
   if (state.player.caught) return 'A lantern has closed in.';
   if (state.player.hidden) return 'You are in deep cover. Stay low and let the watch pass.';
   if (state.detection > 0.62) return 'Too close to the light. Break sight and crouch.';

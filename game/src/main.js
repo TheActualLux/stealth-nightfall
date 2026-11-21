@@ -1,11 +1,12 @@
 // Game setup, screen flow, deterministic simulation updates, and the single animation loop.
-import { createInput, ACT_MUTE, ACT_PAUSE, ACT_RESTART, ACT_START, ACT_STONE, ACT_LEVEL_1, ACT_LEVEL_2, ACT_LEVEL_3 } from './input.js';
+import { createInput, ACT_MUTE, ACT_PAUSE, ACT_RESTART, ACT_START, ACT_STONE, ACT_LEVEL_1, ACT_LEVEL_2, ACT_LEVEL_3, ACT_LANTERN } from './input.js';
 import { LEVELS } from './levels.js';
 import { createWorld } from './world.js';
 import { createPlayer, collectKeys, movePlayer, throwStone } from './player.js';
 import { createGuards, updateGuards } from './guards.js';
 import { createRenderer } from './render.js';
 import { createAudio } from './audio.js';
+import { createLanterns, isInsideLanternShadow, toggleNearbyLantern } from './lanterns.js';
 
 const canvas = document.getElementById('game');
 const status = document.getElementById('status');
@@ -14,7 +15,8 @@ const renderer = createRenderer(canvas);
 const audio = createAudio();
 const state = {
   screen: 'title', levelIndex: 0, level: LEVELS[0], world: createWorld(0),
-  player: createPlayer(LEVELS[0].playerStart), guards: createGuards(LEVELS[0]),
+  player: createPlayer(LEVELS[0].playerStart), guards: createGuards(LEVELS[0]), lanterns: createLanterns(LEVELS[0]),
+  lanternHintShown: false,
   detection: 0, time: 0, elapsed: 0, notice: '', noticeTimer: 0, transitionTimer: 0,
 };
 let previous = performance.now();
@@ -36,6 +38,8 @@ function loadLevel(index) {
   state.world = createWorld(index);
   state.player = createPlayer(state.level.playerStart);
   state.guards = createGuards(state.level);
+  state.lanterns = createLanterns(state.level);
+  state.lanternHintShown = false;
   state.detection = 0;
   state.notice = '';
   if (index === 0) state.elapsed = 0;
@@ -90,6 +94,13 @@ function handleActions() {
     if (state.screen === 'title' || state.screen === 'caught' || state.screen === 'win') startGame();
     else if (state.screen === 'transition') { loadLevel(state.levelIndex); state.screen = 'play'; setNotice(state.level.subtitle, 2.5); }
   }
+  if ((actions & ACT_LANTERN) && state.screen === 'play') {
+    const lantern = toggleNearbyLantern(state.player, state.lanterns);
+    if (lantern) {
+      audio.shutter();
+      setNotice(lantern.lit ? 'Lantern opened. The corridor is bright again.' : 'Lantern shuttered. The corridor sinks into shadow.', 2.2);
+    }
+  }
   if ((actions & ACT_STONE) && state.screen === 'play') {
     const stone = throwStone(state.player, input.pointer(), audio, state.guards);
     if (stone) setNotice('A small sound travels farther than a small shadow.', 2.2);
@@ -103,9 +114,10 @@ function update(dt) {
   if (state.screen !== 'play') return;
   state.elapsed += dt;
   movePlayer(state.player, state.world, input, dt, audio);
+  state.player.hidden = state.player.hidden || isInsideLanternShadow(state.player.x, state.player.y, state.lanterns);
   const key = collectKeys(state.player, state.level);
   if (key) { audio.key(); setNotice('A brass key. The old lock will turn now.', 2.1); }
-  const action = updateGuards(state.guards, state.world, state.player, state.level, dt, audio);
+  const action = updateGuards(state.guards, state.world, state.player, state.level, state.lanterns, dt, audio);
   const visibleGuards = state.guards.filter((guard) => guard.seeing);
   const pressure = action.detection;
   const loudNearMiss = visibleGuards.length === 0 && state.player.sprint && action.nearest && action.nearest.distance < 82;
@@ -113,6 +125,10 @@ function update(dt) {
   const near = loudNearMiss ? dt * 0.42 : 0;
   const recovery = state.player.hidden ? dt * 0.21 : dt * 0.115;
   state.detection = Math.max(0, Math.min(1, state.detection + rise + near - (pressure > 0 || loudNearMiss ? 0 : recovery)));
+  if (!state.lanternHintShown && state.lanterns.some((lantern) => Math.hypot(state.player.x - lantern.x, state.player.y - lantern.y) <= 68)) {
+    state.lanternHintShown = true;
+    setNotice('E shutters a wall lantern. Guards can relight it.', 3);
+  }
   if (loudNearMiss && state.detection > 0.16 && state.noticeTimer < 0.15) setNotice('Gravel scatters underfoot. A lantern turns your way.', 1.8);
   if (state.detection >= 1 || state.player.caught) {
     state.screen = 'caught';

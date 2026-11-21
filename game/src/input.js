@@ -7,6 +7,7 @@ export const ACT_STONE = 16;
 export const ACT_LEVEL_1 = 32;
 export const ACT_LEVEL_2 = 64;
 export const ACT_LEVEL_3 = 128;
+export const ACT_LANTERN = 256;
 
 export function createInput(canvas) {
   const held = new Set();
@@ -28,6 +29,7 @@ export function createInput(canvas) {
     else if (event.code === 'KeyR') actions |= ACT_RESTART;
     else if (event.code === 'KeyM') actions |= ACT_MUTE;
     else if (event.code === 'KeyQ') actions |= ACT_STONE;
+    else if (event.code === 'KeyE') actions |= ACT_LANTERN;
   });
   window.addEventListener('keyup', (event) => held.delete(event.code));
   window.addEventListener('blur', () => held.clear());

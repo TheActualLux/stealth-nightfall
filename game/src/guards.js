@@ -1,6 +1,7 @@
 // Learnable patrol loops, waypoint pauses, investigation, pursuit, and shared detection pressure.
 import { TILE } from './config.js';
 import { seesTarget } from './vision.js';
+import { updateLanternRelights } from './lanterns.js';
 
 const wrapAngle = (angle) => Math.atan2(Math.sin(angle), Math.cos(angle));
 const moveToward = (guard, x, y, speed, dt) => {
@@ -24,13 +25,13 @@ export function createGuards(level) {
   }));
 }
 
-export function updateGuards(guards, world, player, level, dt, audio) {
+export function updateGuards(guards, world, player, level, lanterns, dt, audio) {
   let detection = 0;
   let nearest = null;
   for (const guard of guards) {
     guard.patrolPhase += dt;
     guard.bob += dt * (guard.mode === 'patrol' ? 4 : 8);
-    guard.seeing = seesTarget(world, guard, player, level.length);
+    guard.seeing = seesTarget(world, guard, player, level.length, lanterns);
     const dist = Math.hypot(player.x - guard.x, player.y - guard.y);
     const isVisible = guard.seeing;
     if (nearest === null || dist < nearest.distance) nearest = { distance: dist, name: guard.name };
@@ -87,5 +88,6 @@ export function updateGuards(guards, world, player, level, dt, audio) {
     }
     if (guard.mode === 'chase' && dist < TILE * 0.45) player.caught = true;
   }
+  updateLanternRelights(lanterns, guards, dt, audio);
   return { detection: Math.min(1, detection), nearest };
 }

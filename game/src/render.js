@@ -1,6 +1,8 @@
 // Procedural top-down garden, lantern vision cones, character silhouettes, soft light, and vignetting.
 import { COLS, FONT, HEIGHT, MAP_X, MAP_Y, PALETTE, ROWS, TILE, WIDTH } from './config.js';
 import { drawHud } from './hud.js';
+import { guardVisionRange } from './vision.js';
+import { LANTERN_SHADOW_RANGE, LANTERN_SHADOW_HALF_ANGLE } from './lanterns.js';
 
 const rounded = (ctx, x, y, width, height, radius) => {
   ctx.beginPath(); ctx.roundRect(x, y, width, height, radius);
@@ -118,17 +120,54 @@ function drawGate(ctx, level, time) {
   ctx.restore();
 }
 
-function drawCone(ctx, guard, length, time) {
-  const radius = length * TILE;
-  const color = guard.mode === 'chase' ? 'rgba(226, 65, 55, .24)' : guard.mode === 'suspicious' ? 'rgba(240, 224, 176, .23)' : 'rgba(244, 195, 113, .16)';
+function drawLanternShadows(ctx, lanterns) {
+  for (const lantern of lanterns) {
+    if (lantern.lit) continue;
+    ctx.save();
+    ctx.beginPath(); ctx.moveTo(lantern.x, lantern.y);
+    ctx.arc(lantern.x, lantern.y, LANTERN_SHADOW_RANGE, lantern.facing - LANTERN_SHADOW_HALF_ANGLE, lantern.facing + LANTERN_SHADOW_HALF_ANGLE);
+    ctx.closePath(); ctx.fillStyle = 'rgba(1, 7, 8, .48)'; ctx.fill();
+    ctx.strokeStyle = 'rgba(5, 12, 12, .34)'; ctx.lineWidth = 2; ctx.stroke();
+    ctx.restore();
+  }
+}
+
+function drawLanterns(ctx, lanterns, time) {
+  for (const lantern of lanterns) {
+    ctx.save();
+    if (lantern.lit) {
+      const flicker = 0.78 + Math.sin(time * 4 + lantern.id) * 0.08;
+      const glow = ctx.createRadialGradient(lantern.x, lantern.y, 2, lantern.x, lantern.y, 62);
+      glow.addColorStop(0, `rgba(255, 190, 92, ${0.32 * flicker})`); glow.addColorStop(1, 'rgba(255, 190, 92, 0)');
+      ctx.fillStyle = glow; ctx.fillRect(lantern.x - 64, lantern.y - 64, 128, 128);
+      ctx.shadowColor = '#f3bd65'; ctx.shadowBlur = 9 * flicker;
+      ctx.fillStyle = '#f3bd65'; ctx.beginPath(); ctx.arc(lantern.x, lantern.y, 3.5, 0, Math.PI * 2); ctx.fill();
+    } else {
+      ctx.strokeStyle = 'rgba(177, 190, 166, .7)'; ctx.lineWidth = 1.4;
+      ctx.beginPath(); ctx.moveTo(lantern.x, lantern.y - 4); ctx.bezierCurveTo(lantern.x - 8, lantern.y - 12, lantern.x + 8, lantern.y - 16, lantern.x + 2, lantern.y - 23); ctx.stroke();
+    }
+    ctx.shadowBlur = 0; ctx.strokeStyle = '#606960'; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.moveTo(lantern.x - 7, lantern.y + 7); ctx.lineTo(lantern.x - 7, lantern.y - 2); ctx.lineTo(lantern.x + 5, lantern.y - 2); ctx.lineTo(lantern.x + 5, lantern.y + 3); ctx.stroke();
+    ctx.strokeStyle = '#92917b'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(lantern.x - 9, lantern.y + 8); ctx.lineTo(lantern.x - 4, lantern.y + 8); ctx.moveTo(lantern.x + 3, lantern.y + 4); ctx.lineTo(lantern.x + 7, lantern.y + 4); ctx.stroke();
+    ctx.restore();
+  }
+}
+
+function drawCone(ctx, guard, length, time, lanterns) {
+  const radius = guardVisionRange(guard, length, lanterns) * TILE;
+  const dim = radius < length * TILE;
+  const scale = dim ? 0.48 : 1;
+  const coneColor = guard.mode === 'chase' ? [226, 65, 55, 0.24] : guard.mode === 'suspicious' ? [240, 224, 176, 0.23] : [244, 195, 113, 0.16];
+  const edgeColor = guard.mode === 'chase' ? [239, 102, 84, 0.42] : [255, 216, 149, 0.2];
   ctx.save();
   ctx.beginPath(); ctx.moveTo(guard.x, guard.y);
   ctx.arc(guard.x, guard.y, radius, guard.angle - guard.halfAngle, guard.angle + guard.halfAngle);
-  ctx.closePath(); ctx.fillStyle = color; ctx.fill();
-  ctx.strokeStyle = guard.mode === 'chase' ? 'rgba(239, 102, 84, .42)' : 'rgba(255, 216, 149, .2)';
+  ctx.closePath(); ctx.fillStyle = `rgba(${coneColor[0]}, ${coneColor[1]}, ${coneColor[2]}, ${coneColor[3] * scale})`; ctx.fill();
+  ctx.strokeStyle = `rgba(${edgeColor[0]}, ${edgeColor[1]}, ${edgeColor[2]}, ${edgeColor[3] * scale})`;
   ctx.lineWidth = 1; ctx.stroke();
   const lantern = ctx.createRadialGradient(guard.x, guard.y, 1, guard.x, guard.y, 40);
-  lantern.addColorStop(0, 'rgba(255, 214, 135, .34)'); lantern.addColorStop(1, 'rgba(255, 214, 135, 0)');
+  lantern.addColorStop(0, `rgba(255, 214, 135, ${dim ? '.15' : '.34'})`); lantern.addColorStop(1, 'rgba(255, 214, 135, 0)');
   ctx.fillStyle = lantern; ctx.beginPath(); ctx.arc(guard.x, guard.y, 40 + Math.sin(time * 7 + guard.bob) * 2, 0, Math.PI * 2); ctx.fill();
   ctx.restore();
 }
@@ -207,7 +246,9 @@ export function createRenderer(canvas) {
     drawWater(ctx, state.world, state.time);
     for (const feature of state.world.features) drawFeature(ctx, feature, state.world);
     drawWalls(ctx, state.world);
-    for (const guard of state.guards) drawCone(ctx, guard, state.level.length, state.time);
+    for (const guard of state.guards) drawCone(ctx, guard, state.level.length, state.time, state.lanterns);
+    drawLanternShadows(ctx, state.lanterns);
+    drawLanterns(ctx, state.lanterns, state.time);
     drawKeys(ctx, state.level, state.time);
     drawCoverLight(ctx, state.player);
     for (const guard of state.guards) drawGuard(ctx, guard);
