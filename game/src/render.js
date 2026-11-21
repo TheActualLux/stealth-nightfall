@@ -101,16 +101,20 @@ function drawWalls(ctx, world) {
 function drawGate(ctx, level, time) {
   const x = MAP_X + (COLS - 1) * TILE + TILE * 0.5;
   const y = MAP_Y + 8.5 * TILE;
+  const pulse = (Math.sin(time * 1.35) + 1) / 2;
   ctx.save();
-  const glow = ctx.createRadialGradient(x, y, 2, x, y, TILE * 1.8);
-  glow.addColorStop(0, 'rgba(240, 188, 98, .3)'); glow.addColorStop(1, 'rgba(240, 188, 98, 0)');
-  ctx.fillStyle = glow; ctx.fillRect(x - TILE * 2, y - TILE * 2, TILE * 4, TILE * 4);
-  ctx.strokeStyle = '#b38b54'; ctx.lineWidth = 4;
+  const glow = ctx.createRadialGradient(x, y, 2, x, y, 84 + pulse * 10);
+  glow.addColorStop(0, `rgba(255, 197, 99, ${0.28 + pulse * 0.25})`); glow.addColorStop(0.42, `rgba(240, 188, 98, ${0.11 + pulse * 0.12})`); glow.addColorStop(1, 'rgba(240, 188, 98, 0)');
+  ctx.fillStyle = glow; ctx.fillRect(x - 100, y - 100, 200, 200);
+  ctx.strokeStyle = `rgba(255, 207, 117, ${0.45 + pulse * 0.25})`; ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.arc(x, y, 61 + pulse * 5, 0, Math.PI * 2); ctx.stroke();
+  ctx.shadowColor = PALETTE.amber; ctx.shadowBlur = 8 + pulse * 12;
+  ctx.strokeStyle = '#f3bd65'; ctx.lineWidth = 4;
   ctx.beginPath(); ctx.moveTo(x - 12, y + 17); ctx.lineTo(x - 12, y - 17); ctx.lineTo(x + 14, y - 17); ctx.lineTo(x + 14, y + 17); ctx.stroke();
-  ctx.strokeStyle = 'rgba(242, 216, 156, .6)'; ctx.lineWidth = 2;
+  ctx.strokeStyle = 'rgba(255, 232, 173, .92)'; ctx.lineWidth = 2;
   for (let dx = -7; dx <= 9; dx += 8) { ctx.beginPath(); ctx.moveTo(x + dx, y - 14); ctx.lineTo(x + dx, y + 14); ctx.stroke(); }
-  ctx.fillStyle = level.keys.every((key) => key.found) ? PALETTE.amber : '#7a6b4e';
-  ctx.beginPath(); ctx.arc(x, y, 4 + Math.sin(time * 3) * 0.7, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = PALETTE.amber;
+  ctx.beginPath(); ctx.arc(x, y, 5 + pulse * 2, 0, Math.PI * 2); ctx.fill();
   ctx.restore();
 }
 
@@ -139,8 +143,11 @@ function drawGuard(ctx, guard) {
   ctx.fillStyle = 'rgba(243, 189, 101, .55)'; ctx.beginPath(); ctx.arc(10, 1, 5.6, 0, Math.PI * 2); ctx.fill();
   ctx.restore();
   if (guard.mode === 'suspicious' || guard.mode === 'chase') {
-    ctx.font = `bold 15px ${FONT}`; ctx.textAlign = 'center'; ctx.fillStyle = guard.mode === 'chase' ? PALETTE.red : PALETTE.pale;
-    ctx.fillText(guard.mode === 'chase' ? '!' : '?', guard.x, guard.y - 19);
+    const iconY = guard.y - 27;
+    ctx.fillStyle = 'rgba(7, 19, 20, .92)'; ctx.strokeStyle = PALETTE.amber; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.arc(guard.x, iconY, 8, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    ctx.font = `bold 12px ${FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = PALETTE.amber;
+    ctx.fillText(guard.mode === 'chase' ? '!' : '?', guard.x, iconY + 0.5);
   }
 }
 
@@ -200,13 +207,13 @@ export function createRenderer(canvas) {
     drawWater(ctx, state.world, state.time);
     for (const feature of state.world.features) drawFeature(ctx, feature, state.world);
     drawWalls(ctx, state.world);
-    drawGate(ctx, state.level, state.time);
     for (const guard of state.guards) drawCone(ctx, guard, state.level.length, state.time);
     drawKeys(ctx, state.level, state.time);
     drawCoverLight(ctx, state.player);
     for (const guard of state.guards) drawGuard(ctx, guard);
     drawKeeper(ctx, state.player, state.time);
     drawVignette(ctx);
+    drawGate(ctx, state.level, state.time);
     if (screen === 'play' || screen === 'paused') drawHud(ctx, state, state.muted);
     if (screen !== 'play') drawPanel(ctx, screen, state);
   }
@@ -223,7 +230,8 @@ export function createRenderer(canvas) {
       ctx.fillStyle = PALETTE.muted; ctx.font = `16px ${FONT}`; ctx.fillText('Cross the walled garden. Leave no witness.', WIDTH / 2, y + 132);
       ctx.fillStyle = PALETTE.amber; ctx.font = `600 15px ${FONT}`; ctx.fillText('WASD / arrows move    ·    Shift crouch    ·    Space sprint', WIDTH / 2, y + 187);
       ctx.fillStyle = '#d0d5bf'; ctx.font = `14px ${FONT}`; ctx.fillText('Q / right click toss a stone    ·    M mute    ·    P pause    ·    R restart', WIDTH / 2, y + 218);
-      ctx.fillStyle = '#9caf9e'; ctx.font = `13px ${FONT}`; ctx.fillText('Hide in hedges, behind crates, and in deep shadow.', WIDTH / 2, y + 255);
+      ctx.fillStyle = PALETTE.amber; ctx.font = `600 14px ${FONT}`; ctx.fillText('1 2 3  choose a level', WIDTH / 2, y + 241);
+      ctx.fillStyle = '#9caf9e'; ctx.font = `13px ${FONT}`; ctx.fillText('Hide in hedges, behind crates, and in deep shadow.', WIDTH / 2, y + 270);
       ctx.fillStyle = PALETTE.pale; ctx.font = `600 15px ${FONT}`; ctx.fillText('Press Enter or click to slip inside', WIDTH / 2, y + 311);
     } else if (screen === 'paused') {
       ctx.fillStyle = PALETTE.pale; ctx.font = `bold 30px ${FONT}`; ctx.fillText('The garden is listening', WIDTH / 2, y + 75);

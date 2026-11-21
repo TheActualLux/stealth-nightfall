@@ -4,6 +4,9 @@ export const ACT_PAUSE = 2;
 export const ACT_RESTART = 4;
 export const ACT_MUTE = 8;
 export const ACT_STONE = 16;
+export const ACT_LEVEL_1 = 32;
+export const ACT_LEVEL_2 = 64;
+export const ACT_LEVEL_3 = 128;
 
 export function createInput(canvas) {
   const held = new Set();
@@ -18,6 +21,9 @@ export function createInput(canvas) {
     held.add(event.code);
     if (event.repeat) return;
     if (event.code === 'Enter') actions |= ACT_START;
+    else if (event.code === 'Digit1' || event.code === 'Numpad1') actions |= ACT_LEVEL_1;
+    else if (event.code === 'Digit2' || event.code === 'Numpad2') actions |= ACT_LEVEL_2;
+    else if (event.code === 'Digit3' || event.code === 'Numpad3') actions |= ACT_LEVEL_3;
     else if (event.code === 'Escape' || event.code === 'KeyP') actions |= ACT_PAUSE;
     else if (event.code === 'KeyR') actions |= ACT_RESTART;
     else if (event.code === 'KeyM') actions |= ACT_MUTE;

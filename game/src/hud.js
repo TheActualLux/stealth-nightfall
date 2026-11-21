@@ -34,9 +34,16 @@ export function drawHud(ctx, state, audioMuted) {
   if (state.detection > 0) { ctx.fillStyle = color; rounded(ctx, meterX, meterY, meterW * state.detection, 8, 4); ctx.fill(); }
   ctx.fillStyle = 'rgba(230, 227, 198, .35)'; ctx.fillRect(meterX + meterW * 0.65, meterY - 2, 1, 12);
 
-  ctx.textAlign = 'right'; ctx.fillStyle = PALETTE.pale; ctx.font = `13px ${FONT}`;
   const found = level.keys.filter((key) => key.found).length;
-  ctx.fillText(level.keys.length ? `BRASS KEYS  ${found}/${level.keys.length}` : 'NO KEY REQUIRED', 770, 32);
+  ctx.textAlign = 'right'; ctx.fillStyle = PALETTE.amber; ctx.font = `bold 16px ${FONT}`;
+  ctx.fillText(`KEYS ${found}/${level.keys.length}`, 790, 33);
+  for (let i = 0; i < 3; i += 1) {
+    const keyX = 626 + i * 21;
+    ctx.save(); ctx.strokeStyle = i < found ? PALETTE.amber : 'rgba(243, 189, 101, .42)'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(keyX + 4, 31, 4, 0, Math.PI * 2); ctx.moveTo(keyX + 8, 31); ctx.lineTo(keyX + 17, 31); ctx.lineTo(keyX + 17, 35); ctx.moveTo(keyX + 13, 31); ctx.lineTo(keyX + 13, 34); ctx.stroke();
+    if (i < found) { ctx.fillStyle = PALETTE.amber; ctx.beginPath(); ctx.arc(keyX + 4, 31, 2, 0, Math.PI * 2); ctx.fill(); }
+    ctx.restore();
+  }
   ctx.fillStyle = PALETTE.muted; ctx.font = `12px ${FONT}`; ctx.fillText(formatTime(state.elapsed), 770, 51);
   ctx.textAlign = 'right'; ctx.fillStyle = audioMuted ? '#77847c' : PALETTE.muted; ctx.font = `11px ${FONT}`;
   ctx.fillText(`${audioMuted ? 'MUTED' : 'M'}   ·   R RESTART`, 929, 32);

@@ -1,5 +1,5 @@
 // Game setup, screen flow, deterministic simulation updates, and the single animation loop.
-import { createInput, ACT_MUTE, ACT_PAUSE, ACT_RESTART, ACT_START, ACT_STONE } from './input.js';
+import { createInput, ACT_MUTE, ACT_PAUSE, ACT_RESTART, ACT_START, ACT_STONE, ACT_LEVEL_1, ACT_LEVEL_2, ACT_LEVEL_3 } from './input.js';
 import { LEVELS } from './levels.js';
 import { createWorld } from './world.js';
 import { createPlayer, collectKeys, movePlayer, throwStone } from './player.js';
@@ -41,12 +41,12 @@ function loadLevel(index) {
   if (index === 0) state.elapsed = 0;
 }
 
-function startGame() {
+function startGame(levelIndex = 0) {
   state.elapsed = 0;
-  loadLevel(0);
+  loadLevel(levelIndex);
   state.screen = 'play';
   setNotice('Keep to the shadow. The watch follows a steady rhythm.', 3.2);
-  announce('Nightfall Rookery. The Gravel Walk. Move with WASD or arrow keys.');
+  announce(`Nightfall Rookery. ${state.level.name}. Move with WASD or arrow keys.`);
 }
 
 function restart() {
@@ -80,6 +80,11 @@ function handleActions() {
   if (actions & ACT_PAUSE) {
     if (state.screen === 'play') { state.screen = 'paused'; announce('Paused.'); }
     else if (state.screen === 'paused') { state.screen = 'play'; announce('Resumed.'); }
+  }
+  if (state.screen === 'title') {
+    if (actions & ACT_LEVEL_1) { startGame(0); return; }
+    if (actions & ACT_LEVEL_2) { startGame(1); return; }
+    if (actions & ACT_LEVEL_3) { startGame(2); return; }
   }
   if (actions & ACT_START) {
     if (state.screen === 'title' || state.screen === 'caught' || state.screen === 'win') startGame();
