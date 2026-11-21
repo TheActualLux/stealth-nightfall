@@ -42,7 +42,7 @@ Open `index.html`, press Enter, and pick a level with `1`, `2` or `3`.
 - **Breath.** Sprinting is loud and burns breath; standing still refills it. Walking is free. Gravel scatters under a sprint and a lamplighter will turn toward the sound.
 - **Stones.** A thrown stone lands where you click and pulls the nearest lamplighter's attention to it, which is how you move a patrol off a corridor you need.
 - **Wall lanterns.** Each corridor is lit by iron lanterns. `E` shutters one: the corridor sinks into shadow, and a lamplighter standing in that shadow sees less than half as far. A lamplighter who passes a shuttered lantern relights it after a moment, so a dark corridor is a window, not a hiding place.
-- **Deep cover.** Hedges and interior rooms hide you completely while you are inside them; the hint line says so, so you always know what the game thinks of your position.
+- **The kennel hound.** Levels two and three keep a hound asleep by its kennel. It never sees you: a sprint or a thrown stone within a few paces wakes it, and then it follows the trail of where you have been, barking, dragging the nearest lamplighters toward your scent. Stand still and it runs out of trail; crouch and it never wakes.
 
 ## The garden
 
@@ -64,6 +64,7 @@ Plain ES modules, no libraries, no build step, no network. `game/src` holds the 
 | `guards.js` | patrol routes, pauses, suspicion, chase, relighting |
 | `vision.js` | the line-of-sight test against the tile map |
 | `lanterns.js` | which lantern is near, its shadow, and the guard's reduced sight in it |
+| `hound.js` | the kennel hound: sleeping, waking on noise, following the keeper's scent trail |
 | `world.js` | the tile map, collision and cover queries |
 | `render.js` | the camera, the cones, the light pools, the silhouettes |
 | `hud.js` | the suspicion meter, breath bar, key row and the hint line |

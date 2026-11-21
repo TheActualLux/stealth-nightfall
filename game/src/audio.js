@@ -36,6 +36,7 @@ export function createAudio() {
     key() { tone(560, 0.18, 'sine', 0.04, 220); setTimeout(() => tone(880, 0.28, 'sine', 0.03, 160), 95); },
     gate() { tone(330, 0.4, 'sine', 0.025, 280); setTimeout(() => tone(495, 0.55, 'sine', 0.03, 250), 140); },
     alarm() { tone(190, 0.5, 'sawtooth', 0.04, 280); },
+    bark() { tone(260, 0.08, 'square', 0.03, -120); setTimeout(() => tone(200, 0.1, 'square', 0.026, -80), 105); },
     clank() { tone(310, 0.11, 'triangle', 0.018, -125); setTimeout(() => tone(205, 0.09, 'triangle', 0.012, -55), 45); },
     shutter() { tone(245, 0.075, 'triangle', 0.012, -90); },
     lantern(dt) {

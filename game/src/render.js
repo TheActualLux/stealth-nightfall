@@ -3,6 +3,7 @@ import { COLS, FONT, HEIGHT, MAP_X, MAP_Y, PALETTE, ROWS, TILE, WIDTH } from './
 import { drawHud } from './hud.js';
 import { guardVisionRange } from './vision.js';
 import { LANTERN_SHADOW_RANGE, LANTERN_SHADOW_HALF_ANGLE } from './lanterns.js';
+import { drawHounds } from './hound.js';
 
 const rounded = (ctx, x, y, width, height, radius) => {
   ctx.beginPath(); ctx.roundRect(x, y, width, height, radius);
@@ -258,6 +259,7 @@ export function createRenderer(canvas) {
     drawLanternShadows(ctx, state.lanterns);
     drawLanterns(ctx, state.lanterns, state.time);
     drawKeys(ctx, state.level, state.time);
+    drawHounds(ctx, state.hounds ?? [], state.time);
     drawCoverLight(ctx, state.player);
     for (const guard of state.guards) drawGuard(ctx, guard);
     drawKeeper(ctx, state.player, state.time);

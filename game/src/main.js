@@ -7,6 +7,7 @@ import { createGuards, updateGuards } from './guards.js';
 import { createRenderer } from './render.js';
 import { createAudio } from './audio.js';
 import { createLanterns, isInsideLanternShadow, toggleNearbyLantern } from './lanterns.js';
+import { createHounds, updateHounds } from './hound.js';
 
 const canvas = document.getElementById('game');
 const status = document.getElementById('status');
@@ -15,7 +16,7 @@ const renderer = createRenderer(canvas);
 const audio = createAudio();
 const state = {
   screen: 'title', levelIndex: 0, level: LEVELS[0], world: createWorld(0),
-  player: createPlayer(LEVELS[0].playerStart), guards: createGuards(LEVELS[0]), lanterns: createLanterns(LEVELS[0]),
+  player: createPlayer(LEVELS[0].playerStart), guards: createGuards(LEVELS[0]), lanterns: createLanterns(LEVELS[0]), hounds: createHounds(LEVELS[0]),
   lanternHintShown: false,
   detection: 0, time: 0, elapsed: 0, notice: '', noticeTimer: 0, transitionTimer: 0,
 };
@@ -39,6 +40,7 @@ function loadLevel(index) {
   state.player = createPlayer(state.level.playerStart);
   state.guards = createGuards(state.level);
   state.lanterns = createLanterns(state.level);
+  state.hounds = createHounds(state.level);
   state.lanternHintShown = false;
   state.detection = 0;
   state.notice = '';
@@ -118,6 +120,8 @@ function update(dt) {
   const key = collectKeys(state.player, state.level);
   if (key) { audio.key(); setNotice('A brass key. The old lock will turn now.', 2.1); }
   const action = updateGuards(state.guards, state.world, state.player, state.level, state.lanterns, dt, audio);
+  const houndPressure = updateHounds(state.hounds, state.player, dt, audio);
+  action.detection = Math.max(action.detection, houndPressure);
   const visibleGuards = state.guards.filter((guard) => guard.seeing);
   const pressure = action.detection;
   const loudNearMiss = visibleGuards.length === 0 && state.player.sprint && action.nearest && action.nearest.distance < 82;

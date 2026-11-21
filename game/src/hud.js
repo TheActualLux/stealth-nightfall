@@ -11,6 +11,7 @@ function hintFor(state) {
   if (state.notice) return state.notice;
   if (findNearbyLantern(state.player.x, state.player.y, state.lanterns)) return 'E shutter or open this wall lantern.';
   if (state.player.caught) return 'A lantern has closed in.';
+  if ((state.hounds ?? []).some((hound) => hound.state === 'awake')) return 'The hound is awake and following your scent. Stand still, then move quiet.';
   if (state.player.hidden) return 'You are in deep cover. Stay low and let the watch pass.';
   if (state.detection > 0.62) return 'Too close to the light. Break sight and crouch.';
   if (state.detection > 0.2) return 'A guard is searching. Slip behind a wall or hedge.';

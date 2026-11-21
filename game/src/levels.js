@@ -20,7 +20,8 @@ export const LEVELS = [
       { name: 'Sedge', route: [[5, 4], [8, 4], [8, 6], [7, 7], [5, 7]], pause: 0.55 },
       { name: 'Pell', route: [[15, 8], [23, 8], [23, 10], [23, 8]], pause: 0.7 },
       { name: 'Wren', route: [[13, 2], [13, 6], [13, 2]], pause: 0.8 },
-    ], length: 6.7, suspicion: 1.9, chase: 3.5,
+    ], hounds: [{ col: 21, row: 15, facing: Math.PI }, { col: 2, row: 3, facing: 0 }],
+    length: 6.7, suspicion: 1.9, chase: 3.5,
   },
   {
     name: 'The Rookery Gate', subtitle: 'Two keys remain. Keep to the shadows.', keys: [[2, 11], [14, 7]], lanterns: [wallLantern(6, 7, Math.PI / 2), wallLantern(18, 12, Math.PI / 2), wallLantern(11, 5, 0)], guards: [
@@ -30,7 +31,8 @@ export const LEVELS = [
       { name: 'Pell', route: [[15, 8], [23, 8], [23, 10], [23, 8]], pause: 0.55 },
       { name: 'Wren', route: [[13, 2], [13, 6], [13, 2]], pause: 0.75 },
       { name: 'Rook', route: [[12, 10], [12, 7], [12, 4], [12, 7]], pause: 0.6 },
-    ], length: 7.2, suspicion: 1.65, chase: 3.8,
+    ], hounds: [{ col: 21, row: 15, facing: Math.PI }, { col: 2, row: 3, facing: 0 }, { col: 24, row: 2, facing: Math.PI }],
+    length: 7.2, suspicion: 1.65, chase: 3.8,
   },
 ].map((level) => ({
   ...level,
@@ -39,6 +41,7 @@ export const LEVELS = [
   })),
   keys: level.keys.map(([col, row], id) => ({ id, ...at(col, row), found: false })),
   lanterns: level.lanterns.map((lantern, id) => ({ ...lantern, id })),
+  hounds: (level.hounds ?? []).map((spot) => at(spot.col, spot.row)).map((spot, id) => ({ ...spot, id, facing: level.hounds[id].facing })),
   playerStart: at(1, 15),
   gate: at(25, 8),
 }));
