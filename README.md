@@ -46,9 +46,9 @@ Open `index.html`, press Enter, and pick a level with `1`, `2` or `3`.
 
 ## The garden
 
-![The Glasshouse](screenshots/2-level1.jpg)
+![Deep cover, one key found](screenshots/2-deep-cover.jpg)
 
-![Deep cover behind the hedge](screenshots/3-hedge.jpg)
+![The systems of a level, labelled](screenshots/3-diagram.jpg)
 
 ![The lamplighters find you](screenshots/4-caught.jpg)
 

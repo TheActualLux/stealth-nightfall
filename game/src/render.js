@@ -159,13 +159,13 @@ function drawCone(ctx, guard, length, time, lanterns) {
   const dim = radius < length * TILE;
   const scale = dim ? 0.48 : 1;
   const coneColor = guard.mode === 'chase' ? [226, 65, 55, 0.24] : guard.mode === 'suspicious' ? [240, 224, 176, 0.23] : [244, 195, 113, 0.16];
-  const edgeColor = guard.mode === 'chase' ? [239, 102, 84, 0.42] : [255, 216, 149, 0.2];
+  const edgeColor = guard.mode === 'chase' ? [239, 102, 84, 0.55] : guard.mode === 'suspicious' ? [255, 226, 170, 0.38] : [255, 216, 149, 0.30];
   ctx.save();
   ctx.beginPath(); ctx.moveTo(guard.x, guard.y);
   ctx.arc(guard.x, guard.y, radius, guard.angle - guard.halfAngle, guard.angle + guard.halfAngle);
   ctx.closePath(); ctx.fillStyle = `rgba(${coneColor[0]}, ${coneColor[1]}, ${coneColor[2]}, ${coneColor[3] * scale})`; ctx.fill();
   ctx.strokeStyle = `rgba(${edgeColor[0]}, ${edgeColor[1]}, ${edgeColor[2]}, ${edgeColor[3] * scale})`;
-  ctx.lineWidth = 1; ctx.stroke();
+  ctx.lineWidth = 1.4; ctx.stroke();
   const lantern = ctx.createRadialGradient(guard.x, guard.y, 1, guard.x, guard.y, 40);
   lantern.addColorStop(0, `rgba(255, 214, 135, ${dim ? '.15' : '.34'})`); lantern.addColorStop(1, 'rgba(255, 214, 135, 0)');
   ctx.fillStyle = lantern; ctx.beginPath(); ctx.arc(guard.x, guard.y, 40 + Math.sin(time * 7 + guard.bob) * 2, 0, Math.PI * 2); ctx.fill();
@@ -220,9 +220,17 @@ function drawKeys(ctx, level, time) {
 }
 
 function drawCoverLight(ctx, player) {
-  const shade = ctx.createRadialGradient(player.x, player.y, 2, player.x, player.y, player.hidden ? 94 : 50);
-  shade.addColorStop(0, player.hidden ? 'rgba(174, 193, 145, .13)' : 'rgba(240, 209, 148, .1)');
-  shade.addColorStop(1, 'rgba(240, 209, 148, 0)'); ctx.fillStyle = shade; ctx.fillRect(player.x - 100, player.y - 100, 200, 200);
+  // The keeper carries a shuttered hand lamp: a small warm ring that makes them
+  // findable in a still frame without giving away more ground than they gain.
+  const reach = player.hidden ? 108 : 66;
+  const shade = ctx.createRadialGradient(player.x, player.y, 2, player.x, player.y, reach);
+  shade.addColorStop(0, player.hidden ? 'rgba(186, 205, 156, .20)' : 'rgba(246, 216, 156, .17)');
+  shade.addColorStop(0.55, player.hidden ? 'rgba(174, 193, 145, .07)' : 'rgba(240, 209, 148, .06)');
+  shade.addColorStop(1, 'rgba(240, 209, 148, 0)'); ctx.fillStyle = shade; ctx.fillRect(player.x - reach, player.y - reach, reach * 2, reach * 2);
+  ctx.strokeStyle = player.hidden ? 'rgba(214, 232, 190, .42)' : 'rgba(247, 221, 166, .34)';
+  ctx.lineWidth = 1.2; ctx.beginPath(); ctx.arc(player.x, player.y, player.hidden ? 15 : 13, 0, Math.PI * 2); ctx.stroke();
+  ctx.fillStyle = 'rgba(247, 222, 168, .9)';
+  ctx.beginPath(); ctx.arc(player.x + 7, player.y - 3, 1.9, 0, Math.PI * 2); ctx.fill();
 }
 
 function drawVignette(ctx) {
