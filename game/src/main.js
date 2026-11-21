@@ -1,134 +1,160 @@
-// Boot and the one loop: input is read every frame, the world advances in fixed 1/60 s steps
-// (several in a slow frame, none in a fast one), and the renderer paints what is there. The game
-// moves between four screens: title, play, paused and game over.
-//
-// ?seed=N fixes the falling pattern. ?shot=start|play|end (with &seed=N) stages that scene
-// instead of running the loop, paints it twice and sets window.__shotReady for a screenshot.
-import { BEST_KEY, LIVES, STEP } from './config.js';
-import { createRandom } from './random.js';
-import { createWorld, EVENT_HIT, EVENT_OVER } from './world.js';
-import { ACTION_CONFIRM, ACTION_PAUSE, createInput } from './input.js';
-import { createRenderer, SCREEN_OVER, SCREEN_PAUSED, SCREEN_PLAY, SCREEN_TITLE } from './render.js';
-import { stageShot } from './shots.js';
-
-/** The longest frame the loop catches up on; a longer stall (a hidden tab) is dropped, not replayed. */
-const MAX_FRAME = 0.25;
-
-const params = new URLSearchParams(window.location.search);
-const shot = params.get('shot');
-const seedParam = Number.parseInt(params.get('seed') ?? '', 10);
-const seed = Number.isInteger(seedParam) ? seedParam : Math.floor(Math.random() * 4294967296);
+// Game setup, screen flow, deterministic simulation updates, and the single animation loop.
+import { createInput, ACT_MUTE, ACT_PAUSE, ACT_RESTART, ACT_START, ACT_STONE } from './input.js';
+import { LEVELS } from './levels.js';
+import { createWorld } from './world.js';
+import { createPlayer, collectKeys, movePlayer, throwStone } from './player.js';
+import { createGuards, updateGuards } from './guards.js';
+import { createRenderer } from './render.js';
+import { createAudio } from './audio.js';
 
 const canvas = document.getElementById('game');
 const status = document.getElementById('status');
-const world = createWorld(createRandom(seed));
+const input = createInput(canvas);
 const renderer = createRenderer(canvas);
+const audio = createAudio();
+const state = {
+  screen: 'title', levelIndex: 0, level: LEVELS[0], world: createWorld(0),
+  player: createPlayer(LEVELS[0].playerStart), guards: createGuards(LEVELS[0]),
+  detection: 0, time: 0, elapsed: 0, notice: '', noticeTimer: 0, transitionTimer: 0,
+};
+let previous = performance.now();
+let accumulator = 0;
+let lastNotice = '';
 
-function readBest() {
-  try {
-    return Number.parseInt(window.localStorage.getItem(BEST_KEY) ?? '0', 10) || 0;
-  } catch {
-    return 0;
+function announce(message) {
+  if (message !== lastNotice) { status.textContent = message; lastNotice = message; }
+}
+
+function setNotice(message, duration = 2.1) {
+  state.notice = message;
+  state.noticeTimer = duration;
+}
+
+function loadLevel(index) {
+  state.levelIndex = index;
+  state.level = { ...LEVELS[index], keys: LEVELS[index].keys.map((key) => ({ ...key, found: false })) };
+  state.world = createWorld(index);
+  state.player = createPlayer(state.level.playerStart);
+  state.guards = createGuards(state.level);
+  state.detection = 0;
+  state.notice = '';
+  if (index === 0) state.elapsed = 0;
+}
+
+function startGame() {
+  state.elapsed = 0;
+  loadLevel(0);
+  state.screen = 'play';
+  setNotice('Keep to the shadow. The watch follows a steady rhythm.', 3.2);
+  announce('Nightfall Rookery. The Gravel Walk. Move with WASD or arrow keys.');
+}
+
+function restart() {
+  loadLevel(0);
+  state.screen = 'play';
+  setNotice('A fresh night. Find your way to the rookery gate.', 2.5);
+  announce('Nightfall Rookery restarted.');
+}
+
+function advanceLevel() {
+  if (state.levelIndex >= LEVELS.length - 1) {
+    state.screen = 'win';
+    audio.gate();
+    announce(`The rookery sleeps. Night run ${Math.floor(state.elapsed)} seconds.`);
+    return;
+  }
+  state.levelIndex += 1;
+  state.level = { ...LEVELS[state.levelIndex], keys: LEVELS[state.levelIndex].keys.map((key) => ({ ...key, found: false })) };
+  state.screen = 'transition';
+  setNotice('');
+  announce(`${state.level.name}. New patrols ahead.`);
+}
+
+function handleActions() {
+  const actions = input.takeActions();
+  if (actions & ACT_MUTE) {
+    const muted = audio.toggle();
+    setNotice(muted ? 'The garden falls quiet.' : 'Lanterns and footsteps return.', 1.6);
+  }
+  if (actions & ACT_RESTART && state.screen !== 'title') { restart(); return; }
+  if (actions & ACT_PAUSE) {
+    if (state.screen === 'play') { state.screen = 'paused'; announce('Paused.'); }
+    else if (state.screen === 'paused') { state.screen = 'play'; announce('Resumed.'); }
+  }
+  if (actions & ACT_START) {
+    if (state.screen === 'title' || state.screen === 'caught' || state.screen === 'win') startGame();
+    else if (state.screen === 'transition') { loadLevel(state.levelIndex); state.screen = 'play'; setNotice(state.level.subtitle, 2.5); }
+  }
+  if ((actions & ACT_STONE) && state.screen === 'play') {
+    const stone = throwStone(state.player, input.pointer(), audio, state.guards);
+    if (stone) setNotice('A small sound travels farther than a small shadow.', 2.2);
+    else if (state.player.stoneCooldown > 0) setNotice('Wait for the stone to return.', 1.2);
   }
 }
 
-function saveBest(value) {
-  try {
-    window.localStorage.setItem(BEST_KEY, String(value));
-  } catch {
-    // Storage can be off (private windows): the best score then lasts this visit only.
+function update(dt) {
+  state.time += dt;
+  audio.lantern(dt);
+  if (state.screen !== 'play') return;
+  state.elapsed += dt;
+  movePlayer(state.player, state.world, input, dt, audio);
+  const key = collectKeys(state.player, state.level);
+  if (key) { audio.key(); setNotice('A brass key. The old lock will turn now.', 2.1); }
+  const action = updateGuards(state.guards, state.world, state.player, state.level, dt, audio);
+  const visibleGuards = state.guards.filter((guard) => guard.seeing);
+  const pressure = action.detection;
+  const loudNearMiss = visibleGuards.length === 0 && state.player.sprint && action.nearest && action.nearest.distance < 82;
+  const rise = pressure > 0 ? dt * (0.32 + pressure * 1.25) : 0;
+  const near = loudNearMiss ? dt * 0.42 : 0;
+  const recovery = state.player.hidden ? dt * 0.21 : dt * 0.115;
+  state.detection = Math.max(0, Math.min(1, state.detection + rise + near - (pressure > 0 || loudNearMiss ? 0 : recovery)));
+  if (loudNearMiss && state.detection > 0.16 && state.noticeTimer < 0.15) setNotice('Gravel scatters underfoot. A lantern turns your way.', 1.8);
+  if (state.detection >= 1 || state.player.caught) {
+    state.screen = 'caught';
+    announce('Caught. Press Enter to try again, or R to restart.');
+    return;
+  }
+  if (state.noticeTimer > 0) state.noticeTimer -= dt;
+  else state.notice = '';
+  if (state.player.stone) {
+    state.player.stone.age += dt;
+    if (state.player.stone.age >= 0.5) state.player.stone = null;
+  }
+  const gateDistance = Math.hypot(state.player.x - state.level.gate.x, state.player.y - state.level.gate.y);
+  if (gateDistance < 35) {
+    if (state.level.keys.every((item) => item.found)) advanceLevel();
+    else if (state.noticeTimer <= 0) setNotice('The gate needs every brass key.', 1.7);
   }
 }
 
-function runShot(name) {
-  const scene = stageShot(name, world);
-  let painted = 0;
-  function paint() {
-    renderer.draw(world.state, scene.screen, scene.best);
-    painted += 1;
-    if (painted < 2) requestAnimationFrame(paint);
-    else window.__shotReady = true;
-  }
-  requestAnimationFrame(paint);
+function draw() {
+  renderer.draw(state, state.screen, 0, audio.muted());
 }
 
-function runGame() {
-  const input = createInput(canvas);
-  let screen = SCREEN_TITLE;
-  let best = readBest();
-  let accumulator = 0;
-  let last = performance.now();
-
-  // Screen readers (and anyone watching the page's text) hear the screen changes and each hit.
-  function announce(message) {
-    status.textContent = message;
-  }
-
-  function startGame() {
-    world.reset();
-    accumulator = 0;
-    screen = SCREEN_PLAY;
-    announce(`Playing. ${LIVES} lives.`);
-  }
-
-  function endGame() {
-    screen = SCREEN_OVER;
-    if (world.state.score > best) {
-      best = world.state.score;
-      saveBest(best);
-    }
-    announce(`Game over. Score ${world.state.score}. Best ${best}.`);
-  }
-
-  function handleActions() {
-    const actions = input.takeActions();
-    if (actions & ACTION_CONFIRM && (screen === SCREEN_TITLE || screen === SCREEN_OVER)) startGame();
-    else if (actions & ACTION_PAUSE && screen === SCREEN_PLAY) {
-      screen = SCREEN_PAUSED;
-      announce('Paused.');
-    } else if (actions & (ACTION_PAUSE | ACTION_CONFIRM) && screen === SCREEN_PAUSED) {
-      screen = SCREEN_PLAY;
-      announce('Playing.');
-    }
-  }
-
-  function step() {
-    if (screen === SCREEN_TITLE) {
-      world.step(STEP, 0, true);
-      return;
-    }
-    const events = world.step(STEP, input.direction(), false);
-    if (events & EVENT_OVER) endGame();
-    else if (events & EVENT_HIT) announce(world.state.lives === 1 ? 'Hit. 1 life left.' : `Hit. ${world.state.lives} lives left.`);
-  }
-
-  function frame(now) {
-    requestAnimationFrame(frame);
-    accumulator += Math.min((now - last) / 1000, MAX_FRAME);
-    last = now;
-    handleActions();
-    if (screen === SCREEN_TITLE || screen === SCREEN_PLAY) {
-      while (accumulator >= STEP && (screen === SCREEN_TITLE || screen === SCREEN_PLAY)) {
-        step();
-        accumulator -= STEP;
-      }
-    } else {
-      accumulator = 0;
-    }
-    renderer.draw(world.state, screen, best);
-  }
-
-  // Leaving the tab pauses a running game rather than letting blocks fall unseen.
-  document.addEventListener('visibilitychange', () => {
-    if (document.hidden && screen === SCREEN_PLAY) {
-      screen = SCREEN_PAUSED;
-      announce('Paused.');
-    }
-  });
-
-  announce('Block Dodger. Press Space or click to start.');
+function frame(now) {
   requestAnimationFrame(frame);
+  const elapsed = Math.min(0.1, Math.max(0, (now - previous) / 1000));
+  previous = now;
+  handleActions();
+  if (state.screen === 'play') {
+    accumulator += elapsed;
+    while (accumulator >= 1 / 60) { update(1 / 60); accumulator -= 1 / 60; }
+  } else {
+    accumulator = 0;
+    state.time += elapsed;
+    audio.lantern(elapsed);
+  }
+  draw();
 }
 
-if (shot) runShot(shot);
-else runGame();
+canvas.addEventListener('click', () => {
+  if (state.screen === 'title' || state.screen === 'caught' || state.screen === 'win') startGame();
+  else if (state.screen === 'transition') { loadLevel(state.levelIndex); state.screen = 'play'; setNotice(state.level.subtitle, 2.5); }
+});
+
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden && state.screen === 'play') { state.screen = 'paused'; announce('Paused while the garden is hidden.'); }
+});
+window.addEventListener('resize', () => { canvas.width = canvas.clientWidth; canvas.height = canvas.clientHeight; });
+announce('Nightfall Rookery. Press Enter or click to begin.');
+requestAnimationFrame(frame);

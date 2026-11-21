@@ -1,124 +1,112 @@
-// The game's rules and state, with no drawing and no browser in it: the player's paddle, the
-// pool of falling blocks and coins, spawning, collisions, score, lives and level. step() advances
-// one fixed step and returns what happened as bit flags, so the caller can react without the
-// world knowing about screens or sound. Nothing here allocates after createWorld returns.
-import { BLOCK, COIN, FIELD, LEVEL, LIVES, PLAYER, POOL_SIZE } from './config.js';
+// Garden tile layout, cover, collisions, and the geometry shared by sight and movement.
+import { COLS, MAP_X, MAP_Y, ROWS, TILE } from './config.js';
 
-export const KIND_BLOCK = 0;
-export const KIND_COIN = 1;
+const id = (col, row) => `${col},${row}`;
+const rect = (col, row, width = 1, height = 1, kind = 'hedge') => ({ col, row, width, height, kind });
 
-export const EVENT_HIT = 1;
-export const EVENT_COIN = 2;
-export const EVENT_OVER = 4;
+export function createWorld(levelIndex) {
+  const solids = new Set();
+  const covers = new Set();
+  const features = [];
+  const paths = new Set();
+  const ponds = new Set();
+  const shadows = new Set();
+  const addSolid = (col, row, cover = false) => {
+    solids.add(id(col, row));
+    if (cover) covers.add(id(col, row));
+  };
+  const addPatch = (col, row, width, height, kind, solid = false, cover = false) => {
+    features.push(rect(col, row, width, height, kind));
+    if (solid) for (let y = row; y < row + height; y += 1) for (let x = col; x < col + width; x += 1) addSolid(x, y, cover);
+  };
 
-function overlaps(a, b) {
-  return a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y;
+  for (let col = 0; col < COLS; col += 1) { addSolid(col, 0); addSolid(col, ROWS - 1); }
+  for (let row = 0; row < ROWS; row += 1) { addSolid(0, row); addSolid(COLS - 1, row); }
+  solids.delete(id(COLS - 1, 8)); // The rookery gate is an opening in the east wall.
+  for (let col = 1; col < COLS - 1; col += 1) {
+    paths.add(id(col, 8));
+    if (col >= 2 && col <= 21) paths.add(id(col, 13));
+  }
+  for (let row = 1; row < ROWS - 1; row += 1) {
+    paths.add(id(2, row));
+    paths.add(id(12, row));
+    paths.add(id(20, row));
+  }
+
+  // Lily pools and low garden walls are fixed landmarks, visible in every chapter.
+  for (let y = 2; y <= 4; y += 1) for (let x = 15; x <= 17; x += 1) ponds.add(id(x, y));
+  for (let y = 11; y <= 12; y += 1) for (let x = 5; x <= 7; x += 1) ponds.add(id(x, y));
+  addPatch(15, 5, 4, 2, 'glasshouse', true, true);
+  addPatch(4, 2, 2, 2, 'tower', true, true);
+  addPatch(5, 9, 3, 1, 'lowwall', true, true);
+  addPatch(16, 10, 4, 1, 'lowwall', true, true);
+  addPatch(9, 2, 1, 3, 'hedge', true, true);
+  addPatch(4, 5, 1, 2, 'hedge', true, true);
+  addPatch(7, 5, 1, 2, 'hedge', true, true);
+  addPatch(3, 10, 1, 3, 'hedge', true, true);
+  addPatch(8, 11, 1, 2, 'hedge', true, true);
+  addPatch(22, 3, 1, 3, 'hedge', true, true);
+  addPatch(22, 11, 1, 3, 'hedge', true, true);
+  addPatch(22, 14, 2, 1, 'hedge', true, true);
+  // Crates make pockets of hard cover near each crossing.
+  addPatch(10, 10, 1, 1, 'crate', true, true);
+  addPatch(17, 9, 1, 1, 'crate', true, true);
+  addPatch(6, 14, 1, 1, 'crate', true, true);
+  addPatch(23, 6, 1, 1, 'crate', true, true);
+
+  // Deep shadow pockets are passable and hide a crouched keeper from a cone.
+  for (const [col, row] of [[1, 14], [4, 14], [10, 7], [14, 9], [18, 14], [21, 7], [24, 9], [11, 14], [2, 5]]) shadows.add(id(col, row));
+  if (levelIndex > 0) {
+    // Later chapters have less forgiving cover: two hedge corners are opened, crates removed.
+    solids.delete(id(7, 5)); covers.delete(id(7, 5));
+    if (levelIndex > 1) {
+      solids.delete(id(4, 5)); covers.delete(id(4, 5));
+      solids.delete(id(17, 9)); covers.delete(id(17, 9));
+      addPatch(14, 11, 1, 2, 'hedge', true, true);
+    }
+  }
+
+  return { solids, covers, paths, ponds, shadows, features, levelIndex };
 }
 
-export function createWorld(random) {
-  const player = { x: 0, y: FIELD.groundY - PLAYER.height, width: PLAYER.width, height: PLAYER.height, invulnerable: 0 };
-  const items = [];
-  for (let index = 0; index < POOL_SIZE; index += 1) {
-    items.push({ active: false, kind: KIND_BLOCK, x: 0, y: 0, width: 0, height: 0, speed: 0 });
-  }
-  const state = { player, items, score: 0, lives: LIVES, level: 1, elapsed: 0, blockTimer: 0, coinTimer: 0 };
-
-  function reset() {
-    player.x = (FIELD.width - player.width) / 2;
-    player.invulnerable = 0;
-    for (const item of items) item.active = false;
-    state.score = 0;
-    state.lives = LIVES;
-    state.level = 1;
-    state.elapsed = 0;
-    state.blockTimer = BLOCK.interval;
-    state.coinTimer = COIN.interval;
-  }
-
-  function freeItem() {
-    for (let index = 0; index < items.length; index += 1) if (!items[index].active) return items[index];
-    return null;
-  }
-
-  function spawnBlock() {
-    const item = freeItem();
-    if (item === null) return;
-    item.active = true;
-    item.kind = KIND_BLOCK;
-    item.width = BLOCK.minWidth + random() * (BLOCK.maxWidth - BLOCK.minWidth);
-    item.height = BLOCK.height;
-    item.x = random() * (FIELD.width - item.width);
-    item.y = -item.height;
-    item.speed = BLOCK.speed + BLOCK.speedPerLevel * (state.level - 1) + random() * BLOCK.speedJitter;
-  }
-
-  function spawnCoin() {
-    const item = freeItem();
-    if (item === null) return;
-    item.active = true;
-    item.kind = KIND_COIN;
-    item.width = COIN.size;
-    item.height = COIN.size;
-    item.x = random() * (FIELD.width - item.width);
-    item.y = -item.height;
-    item.speed = COIN.speed + COIN.speedPerLevel * (state.level - 1);
-  }
-
-  function blockInterval() {
-    return Math.max(BLOCK.minInterval, BLOCK.interval * BLOCK.intervalScale ** (state.level - 1));
-  }
-
-  /**
-   * One fixed step. `direction` is -1, 0 or 1 (left, still, right). With `harmless` set (the title
-   * screen's backdrop) things fall but nothing touches the player and nothing scores.
-   */
-  function step(dt, direction, harmless) {
-    let events = 0;
-    state.elapsed += dt;
-    state.level = Math.min(LEVEL.max, 1 + Math.floor(state.elapsed / LEVEL.seconds));
-
-    player.x = Math.min(FIELD.width - player.width, Math.max(0, player.x + direction * PLAYER.speed * dt));
-    if (player.invulnerable > 0) player.invulnerable = Math.max(0, player.invulnerable - dt);
-
-    state.blockTimer -= dt;
-    if (state.blockTimer <= 0) {
-      spawnBlock();
-      state.blockTimer += blockInterval();
-    }
-    state.coinTimer -= dt;
-    if (state.coinTimer <= 0) {
-      spawnCoin();
-      state.coinTimer += COIN.interval + random() * COIN.intervalJitter;
-    }
-
-    for (let index = 0; index < items.length; index += 1) {
-      const item = items[index];
-      if (!item.active) continue;
-      item.y += item.speed * dt;
-      if (item.y > FIELD.groundY) {
-        item.active = false;
-        if (item.kind === KIND_BLOCK && !harmless) state.score += BLOCK.dodgePoints;
-        continue;
-      }
-      if (harmless || !overlaps(item, player)) continue;
-      if (item.kind === KIND_COIN) {
-        item.active = false;
-        state.score += COIN.points;
-        events |= EVENT_COIN;
-      } else if (player.invulnerable === 0) {
-        item.active = false;
-        state.lives -= 1;
-        player.invulnerable = PLAYER.invulnerable;
-        events |= EVENT_HIT;
-        if (state.lives === 0) {
-          events |= EVENT_OVER;
-          break;
-        }
-      }
-    }
-    return events;
-  }
-
-  reset();
-  return { state, reset, step };
+export function tileAt(x, y) {
+  return { col: Math.floor((x - MAP_X) / TILE), row: Math.floor((y - MAP_Y) / TILE) };
 }
+
+export function tileCenter(col, row) {
+  return { x: MAP_X + (col + 0.5) * TILE, y: MAP_Y + (row + 0.5) * TILE };
+}
+
+export function isBlocked(world, x, y) {
+  const { col, row } = tileAt(x, y);
+  return col < 0 || row < 0 || col >= COLS || row >= ROWS || world.solids.has(id(col, row)) || world.ponds.has(id(col, row));
+}
+
+export function isCover(world, x, y) {
+  if (isShadow(world, x, y)) return true;
+  const { col, row } = tileAt(x, y);
+  // Cover includes the lee of solid hedges, walls, and crates, not their impassable interiors.
+  for (let rowOffset = -1; rowOffset <= 1; rowOffset += 1) {
+    for (let colOffset = -1; colOffset <= 1; colOffset += 1) {
+      if (!world.covers.has(id(col + colOffset, row + rowOffset))) continue;
+      const centerX = MAP_X + (col + colOffset + 0.5) * TILE;
+      const centerY = MAP_Y + (row + rowOffset + 0.5) * TILE;
+      const gapX = Math.max(0, Math.abs(x - centerX) - TILE / 2);
+      const gapY = Math.max(0, Math.abs(y - centerY) - TILE / 2);
+      if (Math.hypot(gapX, gapY) < 18) return true;
+    }
+  }
+  return false;
+}
+
+export function isShadow(world, x, y) {
+  const { col, row } = tileAt(x, y);
+  return world.shadows.has(id(col, row));
+}
+
+export function blocksSight(world, x, y) {
+  const { col, row } = tileAt(x, y);
+  return col < 0 || row < 0 || col >= COLS || row >= ROWS || world.solids.has(id(col, row)) || world.ponds.has(id(col, row));
+}
+
+export function cellKey(col, row) { return id(col, row); }
